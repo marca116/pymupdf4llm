@@ -1240,23 +1240,33 @@ def extract_cells(table_blocks, cell, markdown=False, ocrpage=False):
                     prefix += "`"
                     suffix = "`" + suffix
 
-                if len(span_text) > 2:
-                    span_text = span_text.rstrip()
-
-                # if span continues previous styling: extend cell text
-                if (ls := len(suffix)) and text.endswith(suffix):
-                    text = text[:-ls] + span_text + suffix
-                else:  # append the span with new styling
-                    if not span_text.strip():
-                        text += " "
-                    else:
-                        text += prefix + span_text.strip() + suffix
+                # Move span-edge whitespace outside markdown markers (so
+                # markers abut non-whitespace) and keep it as a
+                # word-boundary marker between spans.
+                leading = " " if span_text[:1].isspace() else ""
+                trailing = " " if span_text[-1:].isspace() else ""
+                core = span_text.strip()
+                if not core:
+                    text += " "
+                    continue
+                
+                ls = len(suffix)
+                if ls and text.endswith(suffix):
+                    text = text[:-ls] + core + suffix + trailing
+                else:
+                    text += leading + prefix + core + suffix + trailing
     text = (
         text.replace("$<br>", "$ ")
         .replace(" $ <br>", "$ ")
         .replace("$\n", "$ ")
         .replace(" $ \n", "$ ")
     )
+    # Collapse double spaces and strip whitespace adjacent to line breaks
+    # that result from preserving span-edge whitespace.
+    while "  " in text:
+        text = text.replace("  ", " ")
+    for sep in ("<br>", "\n"):
+        text = text.replace(f" {sep}", sep).replace(f"{sep} ", sep)
     return text.strip()
 
 
