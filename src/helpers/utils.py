@@ -1193,6 +1193,10 @@ def extract_cells(table_blocks, cell, markdown=False, ocrpage=False):
             # strikeout detection only works with axis-parallel text
             horizontal = line["dir"] == (0, 1) or line["dir"] == (1, 0)
 
+            # MuPDF can mis-tag tiny superscripts as struck-out when the
+            # baseline of neighboring larger text intersects their glyphs.
+            line_max_size = max((s["size"] for s in line["spans"]), default=0)
+
             for span in line["spans"]:
                 if are_disjoint(span["bbox"], cell):
                     continue
@@ -1218,7 +1222,12 @@ def extract_cells(table_blocks, cell, markdown=False, ocrpage=False):
 
                 prefix = ""
                 suffix = ""
-                if horizontal and span["char_flags"] & pymupdf.mupdf.FZ_STEXT_STRIKEOUT:
+                is_small_super = span["size"] < line_max_size * 0.85
+                if (
+                    horizontal
+                    and not is_small_super
+                    and span["char_flags"] & pymupdf.mupdf.FZ_STEXT_STRIKEOUT
+                ):
                     prefix += "~~"
                     suffix = "~~" + suffix
                 if span["char_flags"] & pymupdf.mupdf.FZ_STEXT_BOLD:
@@ -1249,6 +1258,33 @@ def extract_cells(table_blocks, cell, markdown=False, ocrpage=False):
         .replace(" $ \n", "$ ")
     )
     return text.strip()
+
+
+def split_overgrown_table_cells(cells, bbox):
+    """Append a full-width row for text below the table's data area.
+
+    PyMuPDF sometimes vertically merges a sparse column-0 cell with empty
+    cells below it, swallowing text that lives there. Trim such cells to
+    the data y1 and append one full-width row spanning the leftover area
+    so its text isn't truncated by the column boundary on the right.
+    """
+    if not cells:
+        return cells
+    last_y1s = [c[3] for c in cells[-1] if c is not None]
+    if not last_y1s:
+        return cells
+    data_y1 = max(last_y1s)
+    phantom_y1 = data_y1
+    for row in cells:
+        for j, c in enumerate(row):
+            if c is not None and c[3] > data_y1 + 2:
+                phantom_y1 = max(phantom_y1, c[3])
+                row[j] = (c[0], c[1], c[2], data_y1)
+    if phantom_y1 > data_y1 + 2:
+        cells.append(
+            [(bbox[0], data_y1, bbox[2], phantom_y1)] + [None] * (len(cells[0]) - 1)
+        )
+    return cells
 
 
 def table_to_markdown(table_blocks, table_item, markdown=True, ocrpage=False):
