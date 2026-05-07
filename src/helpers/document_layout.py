@@ -1194,6 +1194,13 @@ def parse_document(
                         cells.insert(0, table.header.cells)  # insert a row
                         row_count += 1  # increase row count
 
+                    # Use the layout clip's x-extent so footnote text wider
+                    # than the column structure above isn't truncated.
+                    cells = utils.split_overgrown_table_cells(
+                        cells, (clip.x0, clip.y0, clip.x1, clip.y1)
+                    )
+                    row_count = len(cells)
+
                     layoutbox.table = {
                         "bbox": list(table.bbox),
                         "row_count": row_count,
