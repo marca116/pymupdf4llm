@@ -440,7 +440,10 @@ def get_styled_text(spans):
                 and output.endswith("-")
                 and len(output.split()[-1]) > 2
             ):
-                output = output[:-1]
+                # Trailing "-" across line break joins without a space for alphabetic word hyphenation
+                if output[-2].isalpha() and span_text[:1].isalpha():
+                    output = output[:-1]
+
                 text = span_text + suffix + " "
             elif superscript:
                 text = span_text + suffix + " "
